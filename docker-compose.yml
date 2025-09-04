@@ -11,6 +11,6 @@ services:
       MYSQL_DATABASE: go_course_user
       MYSQL_ROOT_PASSWORD: root
     ports:
-      - "3320:3306" # aplicacion le pego al 3320 y lo redireciona al 3306
+      - "3321:3306" # aplicacion le pego al 3320 y lo redireciona al 3306
     volumes:
       - ./dockers/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
