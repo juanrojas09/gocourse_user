@@ -1,6 +1,7 @@
 package users
 
 import (
+	"context"
 	"errors"
 	"log"
 	"strings"
@@ -10,12 +11,12 @@ import (
 
 type (
 	Service interface {
-		Create(firstName, lastName, email, phone string) (*domain.User, error)
-		Update(req *UpdateReq) (*UpdateReq, error)
-		Delete(id string) (string, error)
-		GetById(id string) (*domain.User, error)
-		GetAll(filters Filters, offset int, limit int) ([]domain.User, error)
-		Count(filters Filters) (int, error)
+		Create(ctx context.Context, firstName, lastName, email, phone string) (*domain.User, error)
+		Update(ctx context.Context, req *UpdateReq) (*UpdateReq, error)
+		Delete(ctx context.Context, id string) (string, error)
+		GetById(ctx context.Context, id string) (*domain.User, error)
+		GetAll(ctx context.Context, filters Filters, offset int, limit int) ([]domain.User, error)
+		Count(ctx context.Context, filters Filters) (int, error)
 	} //interface del servicio
 	service struct { //representa las propiedades de la estructura del servicio "clase"
 		r      UserRepository
@@ -37,7 +38,7 @@ func NewService(r UserRepository, logger *log.Logger) Service {
 	}
 }
 
-func (s *service) Create(firstName, lastName, email, phone string) (*domain.User, error) {
+func (s *service) Create(ctx context.Context, firstName, lastName, email, phone string) (*domain.User, error) {
 	user := domain.User{
 		FirstName: firstName,
 		LastName:  lastName,
@@ -45,7 +46,7 @@ func (s *service) Create(firstName, lastName, email, phone string) (*domain.User
 		Phone:     phone,
 	}
 	s.logger.Printf("Usuario a crear: %s", user)
-	usr, err := s.r.Create(&user)
+	usr, err := s.r.Create(ctx, &user)
 	if err != nil {
 		return nil, err
 	}
@@ -54,14 +55,14 @@ func (s *service) Create(firstName, lastName, email, phone string) (*domain.User
 
 }
 
-func (s *service) Update(req *UpdateReq) (*UpdateReq, error) {
+func (s *service) Update(ctx context.Context, req *UpdateReq) (*UpdateReq, error) {
 
 	if strings.TrimSpace(*req.ID) == "" {
 		return nil, errors.New("User id cannot be null on update")
 	}
 
 	s.logger.Printf("Usuario a crear: %s", req)
-	err := s.r.Update(req)
+	err := s.r.Update(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -69,10 +70,10 @@ func (s *service) Update(req *UpdateReq) (*UpdateReq, error) {
 	return req, nil
 
 }
-func (s *service) Delete(id string) (string, error) {
+func (s *service) Delete(ctx context.Context, id string) (string, error) {
 
 	s.logger.Printf("Usuario con id a borrar: %s", id)
-	err := s.r.Delete(id)
+	err := s.r.Delete(ctx, id)
 	if err != nil {
 		return "", err
 	}
@@ -80,10 +81,10 @@ func (s *service) Delete(id string) (string, error) {
 	return id, nil
 
 }
-func (s *service) GetById(Id string) (*domain.User, error) {
+func (s *service) GetById(ctx context.Context, Id string) (*domain.User, error) {
 
 	s.logger.Printf("Usuario a obtener con el id: %s", Id)
-	usr, err := s.r.GetById(Id)
+	usr, err := s.r.GetById(ctx, Id)
 	if err != nil {
 		return nil, err
 	}
@@ -91,11 +92,11 @@ func (s *service) GetById(Id string) (*domain.User, error) {
 	return usr, nil
 
 }
-func (s *service) GetAll(filters Filters, offset int, limit int) ([]domain.User, error) {
+func (s *service) GetAll(ctx context.Context, filters Filters, offset int, limit int) ([]domain.User, error) {
 
 	s.logger.Printf("Obteniendo todos los usuarios")
 
-	usr, err := s.r.GetAll(filters, offset, limit)
+	usr, err := s.r.GetAll(ctx, filters, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +105,6 @@ func (s *service) GetAll(filters Filters, offset int, limit int) ([]domain.User,
 
 }
 
-func (s *service) Count(filters Filters) (int, error) {
-	return s.r.Count(filters)
+func (s *service) Count(ctx context.Context, filters Filters) (int, error) {
+	return s.r.Count(ctx, filters)
 }
