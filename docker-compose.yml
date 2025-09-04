@@ -1,9 +1,9 @@
 version: "3.5"
 
 services:
-  go-course-web:
+  go-course-user:
     platform: linux/amd64
-    container_name: go-course-web
+    container_name: go-course-user
     build:
       context: ./.dockers/mysql
       dockerfile: Dockerfile
