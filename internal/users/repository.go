@@ -68,6 +68,9 @@ func (r *repository) GetAll(ctx context.Context, filters Filters, offset int, li
 	tx = tx.Offset(offset).Limit(limit)
 	res := tx.Order("created_at desc").Find(&users)
 	if err := r.buildErrorResponse(res.Error); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, &ErrUserNotFound{}
+		}
 		r.logger.Println(err)
 		return nil, err
 	}
@@ -86,6 +89,9 @@ func (r *repository) GetById(ctx context.Context, Id string) (*domain.User, erro
 	res := r.db.WithContext(ctx).First(&user)
 	if err := r.buildErrorResponse(res.Error); err != nil {
 		r.logger.Println(err)
+		if err == gorm.ErrRecordNotFound {
+			return nil, &ErrUserNotFound{Id}
+		}
 		return nil, err
 	}
 	return &user, nil
@@ -106,10 +112,15 @@ func (r *repository) Update(ctx context.Context, req *UpdateReq) error {
 	if req.Phone != nil {
 		values["phone"] = req.Phone
 	}
+
 	res := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", req.ID).Updates(values)
 	if err := r.buildErrorResponse(res.Error); err != nil {
 		r.logger.Println(err)
 		return err
+	}
+	if res.RowsAffected == 0 {
+		r.logger.Printf("user %s not exist", *req.ID)
+		return ErrUserNotFound{*req.ID}
 	}
 	return nil
 }
@@ -120,6 +131,11 @@ func (r *repository) Delete(ctx context.Context, id string) error {
 	if err := r.buildErrorResponse(res.Error); err != nil {
 		r.logger.Println(err)
 		return err
+	}
+
+	if res.RowsAffected == 0 {
+		r.logger.Printf("user %s not exist", id)
+		return ErrUserNotFound{id}
 	}
 
 	return nil

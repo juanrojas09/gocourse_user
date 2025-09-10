@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 
-	"github.com/juanrojas09/gocourse_meta/meta"
+	"github.com/ncostamagna/go-http-utils/meta"
+	"github.com/ncostamagna/go-http-utils/response"
 )
 
 type (
-	Controller func(ctx context.Context, request interface{}) (response interface{}, err error)
+	Controller func(ctx context.Context, request interface{}) (interface{}, error)
 	Endpoints  struct {
 		Create Controller
 		Get    Controller
@@ -37,11 +40,27 @@ type (
 		Phone     *string `json:"phone"`
 	}
 
+	DeleteRequest struct {
+		ID string `json:"id"`
+	}
+
+	GetRequest struct {
+		ID string `json:"id"`
+	}
+	GetAllReq struct {
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+		Email     string `json:"email"`
+		Phone     string `json:"phone"`
+		Limit     int
+		Page      int
+	}
+
 	Response struct {
-		Status int            `json:"status"`
-		Err    string         `json:"err,omitempty"`
-		Data   interface{}    `json:"data,omitempty"`
-		Meta   *meta.Metadata `json:"meta,omitempty"`
+		Status int         `json:"status"`
+		Err    string      `json:"err,omitempty"`
+		Data   interface{} `json:"data,omitempty"`
+		Meta   *meta.Meta  `json:"meta,omitempty"`
 	}
 )
 
@@ -49,138 +68,122 @@ func MakeEndpoints(s Service) Endpoints {
 
 	return Endpoints{
 		Create: makeCreateEndpoint(s),
-		// Update: makeUpdateEndpoint(s),
-		// GetAll: makeGetAllEndpoint(s),
-		// Get:    makeGetEndpoint(s),
-		// Delete: makeDeleteEndpoint(s),
+		Update: makeUpdateEndpoint(s),
+		GetAll: makeGetAllEndpoint(s),
+		Get:    makeGetEndpoint(s),
+		Delete: makeDeleteEndpoint(s),
 	}
 
 }
 
-// func makeDeleteEndpoint(s Service) Controller {
-// 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-// 		vars := mux.Vars(r)
-// 		id := vars["id"]
-// 		fmt.Println(id)
+func makeDeleteEndpoint(s Service) Controller {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
 
-// 		if id == "" {
-// 			w.WriteHeader(400)
-// 			json.NewEncoder(w).Encode(&Response{Status: 400, Err: "Error al eliminar user"})
-// 			return
-// 		}
-// 		id, err := s.Delete(id)
-// 		if err != nil {
-// 			log.Println(err)
-// 		}
+		req := request.(DeleteRequest)
 
-// 		json.NewEncoder(w).Encode(&Response{
-// 			Status: 200,
-// 			Data:   id,
-// 		})
-// 	}
-// }
+		if req.ID == "" {
+
+			return nil, response.BadRequest("Id cannot be null")
+		}
+		id, err := s.Delete(ctx, req.ID)
+		if err != nil {
+			log.Println(err)
+			if errors.As(err, &ErrUserNotFound{}) {
+				return nil, response.NotFound(err.Error())
+			}
+			return nil, response.InternalServerError(err.Error())
+		}
+
+		return nil, response.OK("User deleted successfully", id, nil)
+
+	}
+}
 
 func makeCreateEndpoint(s Service) Controller {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(CreateRequest) //conversion
 		fmt.Println(&req)
 		if req.FirstName == "" {
 
-			return nil, errors.New("first name is required")
+			return nil, response.BadRequest(ErrFirstNameRequired.Error())
 		}
 		if req.LastName == "" {
 
-			return nil, errors.New("last name is required")
+			return nil, response.BadRequest(ErrLastNameRequired.Error())
 		}
 
 		usr, err := s.Create(ctx, req.FirstName, req.LastName, req.Email, req.Phone)
 		if err != nil {
-			return nil, err
+			return nil, response.InternalServerError(err.Error())
 		}
 
-		return usr, nil
+		return response.Created("Success", usr, nil), nil
 
 	}
 }
 
-// func makeGetAllEndpoint(s Service) Controller {
-// 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+func makeGetAllEndpoint(s Service) Controller {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(GetAllReq)
+		filters := Filters{
+			FirstName: req.FirstName,
+			LastName:  req.LastName,
+		}
 
-// 		v := r.URL.Query()
+		count, err := s.Count(ctx, filters)
+		log.Println(count)
+		if err != nil {
+			return nil, response.InternalServerError(err.Error())
+		}
+		defaultLimit := os.Getenv("PAGINATION_PER_PAGE_DEFAULT")
+		meta, err := meta.New(count, req.Page, req.Limit, defaultLimit)
+		if err != nil {
+			return nil, response.InternalServerError(err.Error())
+		}
+		usr, err := s.GetAll(ctx, filters, meta.Offset(), meta.Limit())
 
-// 		filters := Filters{
-// 			FirstName: v.Get("first_name"),
-// 			LastName:  v.Get("last_name"),
-// 		}
+		if err != nil {
+			if errors.As(err, &ErrUserNotFound{}) {
+				return nil, response.NotFound(err.Error())
+			}
+			return nil, response.InternalServerError(err.Error())
+		}
 
-// 		limit, _ := strconv.Atoi(v.Get("limit"))
-// 		page, _ := strconv.Atoi(v.Get("page"))
+		return response.OK("successfull user fetch", usr, meta), nil
 
-// 		count, err := s.Count(filters)
-// 		log.Println(count)
-// 		if err != nil {
-// 			json.NewEncoder(w).Encode(ErrorRes{err.Error()})
-// 		}
-// 		defaultLimit := os.Getenv("PAGINATION_PER_PAGE_DEFAULT")
-// 		meta, err := meta.New(count, page, limit, defaultLimit)
-// 		if err != nil {
-// 			json.NewEncoder(w).Encode(ErrorRes{err.Error()})
-// 		}
-// 		usr, err := s.GetAll(filters, meta.Offset(), meta.Limit())
+	}
+}
 
-// 		if err != nil {
-// 			json.NewEncoder(w).Encode(ErrorRes{err.Error()})
-// 		}
-// 		json.NewEncoder(w).Encode(&Response{
-// 			Status: 200,
-// 			Data:   usr,
-// 			Meta:   meta,
-// 		})
-// 	}
-// }
+func makeUpdateEndpoint(s Service) Controller {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
 
-// func makeUpdateEndpoint(s Service) Controller {
-// 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-// 		var req UpdateReq
-// 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-// 			w.WriteHeader(400)
-// 			json.NewEncoder(w).Encode(&Response{Status: 400, Err: err.Error()})
-// 			return
-// 		}
+		req := request.(UpdateReq)
 
-// 		usr, err := s.Update(&req)
-// 		if err != nil {
-// 			json.NewEncoder(w).Encode(&Response{Status: 400, Err: err.Error()})
-// 		}
-// 		json.NewEncoder(w).Encode(&Response{
-// 			Status: 200,
-// 			Data:   usr,
-// 		})
-// 	}
-// }
+		usr, err := s.Update(ctx, &req)
+		if err != nil {
+			if errors.As(err, &ErrUserNotFound{}) {
+				return nil, response.NotFound(err.Error())
+			}
+			return nil, response.InternalServerError(err.Error())
+		}
+		return response.OK("User updated successfully", usr, nil), nil
+	}
+}
 
-// func makeGetEndpoint(s Service) Controller {
-// 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-// 		fmt.Println("get user")
+func makeGetEndpoint(s Service) Controller {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		fmt.Println("get user")
+		req := request.(GetRequest)
 
-// 		vars := mux.Vars(r)
-// 		id := vars["id"]
+		if req.ID == "" {
+			return response.BadRequest("Invalid request data"), nil
+		}
+		usr, err := s.GetById(ctx, req.ID)
+		if err != nil {
+			return response.InternalServerError(err.Error()), nil
+		}
 
-// 		fmt.Println(id)
-// 		if id == "" {
-// 			w.WriteHeader(400)
-// 			json.NewEncoder(w).Encode(&Response{Status: 400, Err: "Error al obtener user"})
-// 			return
-// 		}
-// 		usr, err := s.GetById(id)
-// 		if err != nil {
-// 			json.NewEncoder(w).Encode(&Response{Status: 400, Err: err.Error()})
-// 		}
+		return response.OK("successfull user fetch", usr, nil), nil
 
-// 		json.NewEncoder(w).Encode(&Response{
-// 			Status: 200,
-// 			Data:   usr,
-// 		})
-
-// 	}
-// }
+	}
+}

@@ -26,9 +26,13 @@ func main() {
 	userRepository := users.NewRepository(db, log)
 	userService := users.NewService(userRepository, log)
 	userEndpoints := users.MakeEndpoints(userService)
+
+	//middleware que abstrae la configuracion del setup de mux y handlers e impl de endpoints
+	//cambios en manejo de encoding e decoding e manejo de errores.
 	h := handler.NewUserHttpServer(ctx, userEndpoints)
 	address := os.Getenv("API_URL") + ":" + os.Getenv("API_PORT")
 	srv := http.Server{
+		//access control maneja configuracion de cors e headers y retorna el handler
 		Handler: accessControl(h),
 		Addr:    address,
 	}
@@ -51,6 +55,10 @@ func errorHandler(err error) {
 	}
 }
 
+/*
+Metodo que recibe el handler que devuelve nuestro metodo del middleware
+Luego devolvemos un http.Handler. En
+*/
 func accessControl(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -59,6 +67,7 @@ func accessControl(h http.Handler) http.Handler {
 		if r.Method == "OPTIONS" {
 			return
 		}
+		//metodo principal que maneja cualquier handler en go, es decir procesa mi middleware que defini antes con lo que entre y salga.
 		h.ServeHTTP(w, r)
 	})
 }

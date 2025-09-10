@@ -64,6 +64,7 @@ func (s *service) Update(ctx context.Context, req *UpdateReq) (*UpdateReq, error
 	s.logger.Printf("Usuario a crear: %s", req)
 	err := s.r.Update(ctx, req)
 	if err != nil {
+
 		return nil, err
 	}
 
